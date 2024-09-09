@@ -1,8 +1,8 @@
 import time
-import streamlit as st
-import pandas as pd
 import string
 import nltk
+import streamlit as st
+import pandas as pd
 from nltk.corpus import stopwords
 from wordcloud import WordCloud
 from sklearn.model_selection import train_test_split
@@ -12,58 +12,49 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.metrics import mean_squared_error
 from joblib import dump, load
 import matplotlib.pyplot as plt
-import seaborn as sns
 
-
+# Download stopwords
 nltk.download('stopwords')
 stop_words = set(stopwords.words('english'))
 
-# Profiling decorator
+# Text preprocessing function
 def preprocess_text(text):
     if isinstance(text, str):
-        # Convert to lowercase, remove punctuation and stopwords
         text = text.lower().translate(str.maketrans('', '', string.punctuation))
         text = ' '.join([word for word in text.split() if word not in stop_words])
     else:
         text = ''
     return text
 
+# Function to load and preprocess data
 def load_and_preprocess_data(filepath):
-    df = pd.read_csv(filepath)
-    
-    # Drop unnecessary columns (modify if necessary)
-    columns_to_drop = ['outlook_headline', 'ceo_approval']  # Example, update based on actual columns
-    df = df.drop(columns=columns_to_drop, errors='ignore')
-    
-    # Clean 'pros' and 'cons' columns
-    df['cleaned_pros'] = df['pros'].apply(preprocess_text)
-    df['cleaned_cons'] = df['cons'].apply(preprocess_text)
-    
-    # Rename the index and start it from 1
-    df.index = df.index + 1  # Start index from 1
-    df.index.name = '#'  # Rename the index to '#'
-    
-    return df
+    try:
+        df = pd.read_csv(filepath, quotechar='"', escapechar='\\', on_bad_lines='skip')
+        df['review_text'] = df['pros'] + ' ' + df['cons']
+        df['cleaned_review_text'] = df['review_text'].apply(preprocess_text)
+        df = df.dropna(subset=['overall_rating'])
+        return df
+    except Exception as e:
+        print(f"Error loading or preprocessing data: {e}")
+        return pd.DataFrame()  # Return an empty DataFrame in case of an error
 
+# Load and preprocess data
+df = load_and_preprocess_data(r"C:\Users\ViezPC1\Pythonprojects\sentiment_aynalysis\glassdoor_reviews.csv")
+
+# Group data by firm and aggregate
 def group_data(df):
     grouped = df.groupby('firm').agg({
         'overall_rating': 'mean',
-        'pros': 'count',  # Count of pros reviews
-        'cons': 'count'   # Count of cons reviews
+        'pros': 'count',
+        'cons': 'count'
     }).reset_index()
 
-    # Rename columns for clarity
-    grouped.rename(columns={'pros': 'num_pros', 'cons': 'num_cons'}, inplace=True)
-    
-    # Ensure num_reviews counts both pros and cons together
+    grouped = grouped.rename(columns={'pros': 'num_pros', 'cons': 'num_cons'})
     grouped['num_reviews'] = grouped['num_pros'] + grouped['num_cons']
     
-    # Set the index to start at 1 and name it '#'
-    grouped.index = grouped.index + 1  # Start index at 1
-    
-    grouped.index.name = '#'  # Name the index column as '#'
     return grouped
 
+# Train and save models
 def train_models(X_train_tfidf, y_train):
     model_lr = LinearRegression()
     model_rf = RandomForestRegressor(random_state=42)
@@ -79,14 +70,11 @@ def train_models(X_train_tfidf, y_train):
 
     return model_lr, model_rf, model_gb
 
-# Load and preprocess data
-df = load_and_preprocess_data(r"C:\Users\ViezPC1\Pythonprojects\sentiment_aynalysis\glassdoor_reviews.csv")
+# Streamlit UI
+st.title('Glassdoor Reviews Analysis')
 
 # Group by firm and aggregate data
 grouped_df = group_data(df)
-
-# Streamlit UI
-st.title('Glassdoor Reviews Analysis')
 
 # Display data overview
 st.write('### Data Overview')
@@ -99,7 +87,7 @@ st.write(grouped_df.head())
 # Search Bar for Firms
 search_query = st.text_input("Search for a company:")
 if search_query:
-    search_query = search_query.strip().lower()  # Process input once
+    search_query = search_query.strip().lower()
     time.sleep(0.5)  # Debouncing
     search_results = grouped_df[grouped_df['firm'].str.contains(search_query, na=False)]
     if not search_results.empty:
@@ -123,7 +111,6 @@ min_reviews, max_reviews = st.sidebar.slider(
     value=(int(grouped_df['num_reviews'].min()), int(grouped_df['num_reviews'].max()))
 )
 
-# Filters for pros and cons review counts
 min_pros, max_pros = st.sidebar.slider(
     'Select number of pros range',
     min_value=int(grouped_df['num_pros'].min()),
@@ -146,14 +133,12 @@ filtered_df = grouped_df[
     (grouped_df['num_pros'] >= min_pros) & 
     (grouped_df['num_cons'] <= max_cons)
 ]
-# Set index to start at 1 and name it '#'
-filtered_df.index = filtered_df.index + 1  # Start index at 1
-filtered_df.index.name = '#'  # Name the index column as '#'
+filtered_df.index = filtered_df.index + 1
+filtered_df.index.name = '#'
 
-# Display filtered data, ensuring num_pros and num_cons are shown
+# Display filtered data
 st.write(f"### Filtered Data")
 st.write(filtered_df[['firm', 'overall_rating', 'num_reviews', 'num_pros', 'num_cons']])
-
 
 # Slider to select the top N firms to display
 top_n = st.slider('Select number of top firms to display:', min_value=1, max_value=50, value=10)
@@ -169,32 +154,20 @@ st.write(f'### Top {top_n} Firms by Number of Reviews')
 st.bar_chart(top_firms_reviews.set_index('firm')['num_reviews'])
 
 # Word Cloud for pros and cons
-pros_text = ' '.join(df['cleaned_pros'].dropna())
-cons_text = ' '.join(df['cleaned_cons'].dropna())
+# pros_text = ' '.join(df['pros'].dropna())
+# cons_text = ' '.join(df['cons'].dropna())
 
-pros_wordcloud = WordCloud(width=800, height=400, background_color='white').generate(pros_text)
-cons_wordcloud = WordCloud(width=800, height=400, background_color='white').generate(cons_text)
+# pros_wordcloud = WordCloud(width=800, height=400, background_color='white').generate(pros_text)
+# cons_wordcloud = WordCloud(width=800, height=400, background_color='white').generate(cons_text)
 
-st.write("### Word Cloud for Pros")
-st.image(pros_wordcloud.to_array())
+# st.write("### Word Cloud for Pros")
+# st.image(pros_wordcloud.to_array())
 
-st.write("### Word Cloud for Cons")
-st.image(cons_wordcloud.to_array())
+# st.write("### Word Cloud for Cons")
+# st.image(cons_wordcloud.to_array())
 
-# # Sentiment distribution per company
-# st.write("### Sentiment Distribution per Company")
-# fig, ax = plt.subplots(figsize=(10, 6))
-# sns.boxplot(x='firm', y='overall_rating', data=df, ax=ax)
-
-# # Set tick labels properly
-# ax.set_xticks(ax.get_xticks())  # Ensures that ticks are set before setting labels
-# ax.set_xticklabels(ax.get_xticklabels(), rotation=90)
-# st.pyplot(fig)
-
-# Combine 'pros' and 'cons' into a single text column
+# Combine 'pros' and 'cons' into a single text column for modeling
 df['review_text'] = df['pros'] + ' ' + df['cons']
-
-# Preprocess text for model training
 df['cleaned_review_text'] = df['review_text'].apply(preprocess_text)
 
 # Drop rows with missing values in the target column
@@ -239,6 +212,21 @@ st.write(f'Linear Regression - Mean Squared Error: {mse_lr:.4f}, R-squared: {r2_
 st.write(f'Random Forest - Mean Squared Error: {mse_rf:.4f}, R-squared: {r2_rf:.4f}')
 st.write(f'Gradient Boosting - Mean Squared Error: {mse_gb:.4f}, R-squared: {r2_gb:.4f}')
 
+# Predict ratings for all reviews in the dataset
+df['predicted_rating_lr'] = model_lr.predict(vectorizer.transform(df['cleaned_review_text']))
+df['predicted_rating_rf'] = model_rf.predict(vectorizer.transform(df['cleaned_review_text']))
+df['predicted_rating_gb'] = model_gb.predict(vectorizer.transform(df['cleaned_review_text']))
+
+# Display the actual and predicted ratings
+st.write('### Actual vs Predicted Ratings (Linear Regression)')
+st.write(df[['firm', 'overall_rating', 'predicted_rating_lr']].head())
+
+st.write('### Actual vs Predicted Ratings (Random Forest)')
+st.write(df[['firm', 'overall_rating', 'predicted_rating_rf']].head())
+
+st.write('### Actual vs Predicted Ratings (Gradient Boosting)')
+st.write(df[['firm', 'overall_rating', 'predicted_rating_gb']].head())
+
 # Allow user input for prediction
 user_review = st.text_area('Enter a review (pros + cons):')
 
@@ -261,4 +249,3 @@ if uploaded_file is not None:
     user_df = pd.read_csv(uploaded_file)
     st.write("### Uploaded Data Overview")
     st.write(user_df.head())
-
