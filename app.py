@@ -19,7 +19,6 @@ nltk.download('stopwords')
 stop_words = set(stopwords.words('english'))
 
 # Profiling decorator
-@st.cache_data
 def preprocess_text(text):
     if isinstance(text, str):
         # Convert to lowercase, remove punctuation and stopwords
@@ -29,7 +28,6 @@ def preprocess_text(text):
         text = ''
     return text
 
-@st.cache_data
 def load_and_preprocess_data(filepath):
     df = pd.read_csv(filepath)
     
@@ -47,7 +45,6 @@ def load_and_preprocess_data(filepath):
     
     return df
 
-@st.cache_data
 def group_data(df):
     grouped = df.groupby('firm').agg({
         'overall_rating': 'mean',
@@ -67,7 +64,6 @@ def group_data(df):
     grouped.index.name = '#'  # Name the index column as '#'
     return grouped
 
-@st.cache_data
 def train_models(X_train_tfidf, y_train):
     model_lr = LinearRegression()
     model_rf = RandomForestRegressor(random_state=42)
